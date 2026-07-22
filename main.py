@@ -15,16 +15,75 @@ class RecordIn(BaseModel) :
     sleep_hours : float = 0.0
     memo : str = ""
 
+def calculate_bmi(weight: float, height: float) -> float:
+    height_m = height / 100  # cm를 m로 변환
+    bmi = weight / (height_m ** 2)
+    return round(bmi, 1)  # 소수점 1자리로 반올림
+
+def classify_bmi(bmi: float) -> str:
+    if bmi < 18.5:
+        return "저체중"
+    elif bmi <= 22.9:
+        return "정상"
+    elif bmi <= 24.9:
+        return "과체중"
+    else:
+        return "비만"
+    
+def classify_bp(systolic: int, diastolic: int) -> str:
+    if systolic >= 140 or diastolic >= 90:
+        return "고혈압"
+    elif systolic < 120 and diastolic < 80:
+        return "정상"
+    else:
+        return "주의"
+    
+def classify_sugar(blood_sugar: int) -> str:
+    if blood_sugar < 100:
+        return "정상"
+    elif blood_sugar <= 125:
+        return "공복혈당장애"
+    else:
+        return "당뇨 의심"
+    
+def generate_warnings(bmi_category: str, bp_category: str, sugar_category: str) -> list:
+    warnings = []
+
+    if bmi_category == "비만":
+        warnings.append("비만 위험 있습니다. 체중 관리가 필요합니다.")
+
+    if bp_category == "고혈압":
+        warnings.append("고혈압 위험이 있습니다. 병원 진료를 권장합니다.")
+
+    if sugar_category == "당뇨 의심":
+        warnings.append("당뇨 의심 수치입니다. 병원 진료를 권장합니다.")
+
+    return warnings
+
 # 기록을 저장할 서랍 (지금은 그냥 리스트)
 records = []
 
 @app.post("/records")
 def create_record(record: RecordIn):
-    new_record = record.dict()          # 받은 데이터를 딕셔너리로 변환
-    new_record["id"] = len(records) + 1  # 간단한 id 부여 (1번, 2번...)
+    new_record = record.dict()
+    new_record["id"] = len(records) + 1
+    
+    bmi = calculate_bmi(record.weight, record.height)
+    new_record["bmi"] = bmi
+    
+    bmi_category = classify_bmi(bmi)
+    new_record["bmi_category"] = bmi_category
+    
+    bp_category = classify_bp(record.systolic, record.diastolic)
+    new_record["bp_category"] = bp_category
+    
+    sugar_category = classify_sugar(record.blood_sugar)
+    new_record["sugar_category"] = sugar_category
+    
+    warnings = generate_warnings(bmi_category, bp_category, sugar_category)
+    new_record["warnings"] = warnings
     
     records.append(new_record)
-    
     return new_record
 
 @app.get("/records")
@@ -50,5 +109,34 @@ def delete_record(record_id: int):
         if record_id == record["id"]:
             records.remove(record)
             return {"message": "삭제되었습니다"}
+        
+    raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다")
+
+@app.put("/records/{record_id}")
+def update_record(record_id: int, record: RecordIn):
+    for old_record in records:
+        if record_id == old_record["id"]:
+            updated_record = record.dict()
+            updated_record["id"] = record_id
+            
+            bmi = calculate_bmi(record.weight, record.height)
+            updated_record["bmi"] = bmi
+            
+            bmi_category = classify_bmi(bmi)
+            updated_record["bmi_category"] = bmi_category
+            
+            bp_category = classify_bp(record.systolic, record.diastolic)
+            updated_record["bp_category"] = bp_category
+            
+            sugar_category = classify_sugar(record.blood_sugar)
+            updated_record["sugar_category"] = sugar_category
+            
+            warnings = generate_warnings(bmi_category, bp_category, sugar_category)
+            updated_record["warnings"] = warnings
+            
+            records.remove(old_record)
+            records.append(updated_record)
+            
+            return updated_record
     
     raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다")
