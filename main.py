@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+import json
 
 app = FastAPI(title="마이 헬스 로그 API", version="1.0")
 
@@ -60,8 +61,19 @@ def generate_warnings(bmi_category: str, bp_category: str, sugar_category: str) 
 
     return warnings
 
-# 기록을 저장할 서랍 (지금은 그냥 리스트)
-records = []
+def save_records():
+    with open("data.json", "w") as f:
+        json.dump(records, f)
+
+def load_records():
+    try:
+        with open("data.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+# 기록을 저장할 서랍 (이제 파일에서 불러옴)
+records = load_records()
 
 @app.post("/records")
 def create_record(record: RecordIn):
@@ -84,6 +96,7 @@ def create_record(record: RecordIn):
     new_record["warnings"] = warnings
     
     records.append(new_record)
+    save_records()  # 기록을 파일에 저장
     return new_record
 
 @app.get("/records")
@@ -108,6 +121,7 @@ def delete_record(record_id: int):
     for record in records:
         if record_id == record["id"]:
             records.remove(record)
+            save_records()  # 기록을 파일에 저장
             return {"message": "삭제되었습니다"}
         
     raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다")
@@ -136,7 +150,34 @@ def update_record(record_id: int, record: RecordIn):
             
             records.remove(old_record)
             records.append(updated_record)
+            save_records()  # 기록을 파일에 저장
             
             return updated_record
     
     raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다")
+
+@app.get("/search")
+def search_records(start: str, end: str):
+    result = []
+    
+    for record in records:
+        if start <= record["date"] <= end:
+            result.append(record)
+    
+    return {"count": len(result), "data": result}
+
+@app.get("/stats")
+def get_stats():
+    if len(records) == 0:
+        return {"message": "기록이 없습니다"}
+    
+    weight_list = []
+    for record in records:
+        weight_list.append(record["weight"])
+    
+    avg_weight = sum(weight_list) / len(weight_list)
+    
+    return {
+        "count": len(records),
+        "avg_weight": round(avg_weight, 1)
+    }
